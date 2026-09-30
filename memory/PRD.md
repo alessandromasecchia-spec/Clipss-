@@ -11,7 +11,7 @@ App web personale (no account, no pagamenti, no abbonamenti) alternativa a CapCu
 
 ## Architettura
 - FastAPI con job asincroni (asyncio.create_task), stato queued/processing/completed/failed + **progress reale** parsato da `ffmpeg -progress`.
-- Storage locale in `backend/storage/` (uploads/outputs/thumbs/models/zips). MongoDB per metadati progetti e job.
+- Storage: object storage gestito da Emergent per video/clip/thumb/zip; MongoDB come indice; elaborazione ffmpeg/whisper/opencv su file temporanei locali scaricati al volo e ripuliti. Serving via backend con supporto HTTP Range (seeking video).
 - Pipeline per clip: crop (face-aware) → scale/pad al target → auto-zoom opz. → sottotitoli ASS burn-in → loudnorm → H.264/AAC 1080x1920.
 - FFmpeg via subprocess con lista argomenti (no shell → no injection). Validazione estensione/MIME/size, sanitize filename, controllo disco.
 

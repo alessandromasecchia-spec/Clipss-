@@ -1,8 +1,8 @@
 import { Scissors, Play } from "lucide-react";
 
-export const Logo = ({ size = 36, withText = true }) => {
+export const Logo = ({ size = 36, withText = true, testId = "clipforge-logo" }) => {
   return (
-    <div className="flex items-center gap-2.5 select-none" data-testid="clipforge-logo">
+    <div className="flex items-center gap-2.5 select-none" data-testid={testId}>
       <div
         className="relative flex items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30"
         style={{ width: size, height: size }}

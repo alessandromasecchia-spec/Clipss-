@@ -8,8 +8,9 @@ OUTPUT_DIR = STORAGE_DIR / "outputs"
 THUMB_DIR = STORAGE_DIR / "thumbs"
 MODEL_DIR = STORAGE_DIR / "models"
 ZIP_DIR = STORAGE_DIR / "zips"
+WORK_DIR = STORAGE_DIR / "work"
 
-for _d in (UPLOAD_DIR, OUTPUT_DIR, THUMB_DIR, MODEL_DIR, ZIP_DIR):
+for _d in (UPLOAD_DIR, OUTPUT_DIR, THUMB_DIR, MODEL_DIR, ZIP_DIR, WORK_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # Allowed video inputs

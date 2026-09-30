@@ -234,11 +234,10 @@ def _apply_preset(style) -> None:
         style.font = d["font"]
 
 
-def make_zip(project_id: str, clip_files: list) -> str:
-    zip_path = ZIP_DIR / f"{project_id}.zip"
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_STORED) as zf:
-        for f in clip_files:
-            p = OUTPUT_DIR / project_id / f
+def make_zip(zip_local: Path, work_dir: Path, files: list) -> Path:
+    with zipfile.ZipFile(zip_local, "w", zipfile.ZIP_STORED) as zf:
+        for f in files:
+            p = work_dir / f
             if p.exists():
                 zf.write(p, arcname=f)
-    return zip_path.name
+    return zip_local

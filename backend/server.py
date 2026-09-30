@@ -5,17 +5,16 @@ import shutil
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Body
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Body, Request
+from fastapi.responses import Response
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
 
-from config import (ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES, OUTPUT_DIR, THUMB_DIR,
-                    UPLOAD_DIR, ZIP_DIR, MODEL_DIR)
-from media import (free_disk_bytes, generate_thumbnail, probe_video, sanitize_filename)
+from config import ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES, THUMB_DIR, WORK_DIR
+from media import free_disk_bytes, generate_thumbnail, probe_video, sanitize_filename
 from models import ClipInfo, ClipSettings, Job, Project, new_id
-from pipeline import (extract_audio, make_zip, render_clip, select_auto_clips,
-                      uniform_clips)
+from pipeline import extract_audio, make_zip, render_clip, select_auto_clips, uniform_clips
+import storage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -52,6 +51,32 @@ async def _get_project(project_id: str) -> dict:
     return p
 
 
+def _range_response(data: bytes, content_type: str, request: Request, filename: str = None):
+    total = len(data)
+    rng = request.headers.get("range") or request.headers.get("Range")
+    headers = {"Accept-Ranges": "bytes"}
+    if filename:
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    if rng and rng.startswith("bytes="):
+        try:
+            part = rng.split("=", 1)[1].split(",")[0]
+            s, e = part.split("-")
+            start = int(s) if s else 0
+            end = int(e) if e else total - 1
+            start = max(0, start)
+            end = min(end, total - 1)
+            if start > end:
+                start, end = 0, total - 1
+            chunk = data[start:end + 1]
+            headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+            headers["Content-Length"] = str(len(chunk))
+            return Response(chunk, status_code=206, media_type=content_type, headers=headers)
+        except Exception:
+            pass
+    headers["Content-Length"] = str(total)
+    return Response(data, media_type=content_type, headers=headers)
+
+
 # ------------------------- routes -------------------------
 @api.get("/")
 async def root():
@@ -68,50 +93,50 @@ async def upload_video(file: UploadFile = File(...)):
     ctype = (file.content_type or "").lower()
     if ctype and not (ctype.startswith("video/") or ctype == "application/octet-stream"):
         raise HTTPException(status_code=400, detail=f"Tipo MIME non valido: {ctype}")
-
-    if free_disk_bytes(UPLOAD_DIR) < 500 * 1024 * 1024:
+    if free_disk_bytes(WORK_DIR) < 500 * 1024 * 1024:
         raise HTTPException(status_code=507, detail="Spazio su disco insufficiente.")
 
     project_id = new_id()
-    pdir = UPLOAD_DIR / project_id
-    pdir.mkdir(parents=True, exist_ok=True)
     safe = sanitize_filename(original)
-    stored = pdir / f"original{ext}"
 
-    size = 0
-    try:
-        with open(stored, "wb") as out:
-            while True:
-                chunk = await file.read(1024 * 1024)
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > MAX_UPLOAD_BYTES:
-                    raise HTTPException(status_code=413, detail="File troppo grande (max 2GB).")
-                out.write(chunk)
-    except HTTPException:
-        shutil.rmtree(pdir, ignore_errors=True)
-        raise
-    except Exception as e:
-        shutil.rmtree(pdir, ignore_errors=True)
-        raise HTTPException(status_code=400, detail=f"Upload interrotto: {e}")
-
-    if size == 0:
-        shutil.rmtree(pdir, ignore_errors=True)
+    # read into memory enforcing the size limit
+    buf = bytearray()
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        buf += chunk
+        if len(buf) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File troppo grande (max 2GB).")
+    if len(buf) == 0:
         raise HTTPException(status_code=400, detail="File vuoto.")
 
+    # persist original to object storage (source of truth)
     try:
-        meta = await probe_video(stored)
-    except ValueError as e:
-        shutil.rmtree(pdir, ignore_errors=True)
-        raise HTTPException(status_code=400, detail=str(e))
+        storage.put_bytes(storage.orig_path(project_id, ext), bytes(buf), ctype or "video/mp4")
+    except Exception as e:
+        logger.exception("Upload su object storage fallito")
+        raise HTTPException(status_code=502, detail=f"Errore di archiviazione: {e}")
 
-    await generate_thumbnail(stored, project_id, at_sec=min(1.0, meta["duration"] / 2))
+    # ephemeral local copy (downloaded from storage) for probe + thumbnail
+    tmp = WORK_DIR / f"probe_{project_id}{ext}"
+    try:
+        storage.download_to(storage.orig_path(project_id, ext), tmp)
+        try:
+            meta = await probe_video(tmp)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        await generate_thumbnail(tmp, project_id, at_sec=min(1.0, meta["duration"] / 2))
+        thumb_local = THUMB_DIR / f"{project_id}.jpg"
+        if thumb_local.exists():
+            storage.put_file(storage.thumb_path(project_id), thumb_local, "image/jpeg")
+            thumb_local.unlink(missing_ok=True)
+    finally:
+        tmp.unlink(missing_ok=True)
 
-    project = Project(
-        id=project_id, name=safe, original_filename=original,
-        stored_filename=stored.name, ext=ext, **meta,
-    )
+    meta["size_bytes"] = len(buf)
+    project = Project(id=project_id, name=safe, original_filename=original,
+                      stored_filename=f"original{ext}", ext=ext, **meta)
     await db.projects.insert_one(project.model_dump())
     return _project_summary(project.model_dump())
 
@@ -124,17 +149,12 @@ async def list_projects():
 
 @api.get("/projects/{project_id}")
 async def get_project(project_id: str):
-    p = await _get_project(project_id)
-    return _project_summary(p)
+    return _project_summary(await _get_project(project_id))
 
 
 @api.delete("/projects/{project_id}")
 async def delete_project(project_id: str):
     await _get_project(project_id)
-    for d in (UPLOAD_DIR / project_id, OUTPUT_DIR / project_id):
-        shutil.rmtree(d, ignore_errors=True)
-    (THUMB_DIR / f"{project_id}.jpg").unlink(missing_ok=True)
-    (ZIP_DIR / f"{project_id}.zip").unlink(missing_ok=True)
     await db.projects.delete_one({"id": project_id})
     await db.jobs.delete_many({"project_id": project_id})
     return {"deleted": True}
@@ -142,39 +162,41 @@ async def delete_project(project_id: str):
 
 # --------------------- media serving ---------------------
 @api.get("/media/thumb/{project_id}")
-async def media_thumb(project_id: str):
-    p = THUMB_DIR / f"{sanitize_filename(project_id)}.jpg"
-    if not p.exists():
+async def media_thumb(project_id: str, request: Request):
+    try:
+        data, ct = storage.get_bytes(storage.thumb_path(sanitize_filename(project_id)))
+    except Exception:
         raise HTTPException(status_code=404, detail="Anteprima non disponibile.")
-    return FileResponse(p, media_type="image/jpeg")
+    return _range_response(data, "image/jpeg", request)
 
 
 @api.get("/media/original/{project_id}")
-async def media_original(project_id: str):
+async def media_original(project_id: str, request: Request):
     proj = await _get_project(project_id)
-    p = UPLOAD_DIR / project_id / proj["stored_filename"]
-    if not p.exists():
+    try:
+        data, ct = storage.get_bytes(storage.orig_path(project_id, proj["ext"]))
+    except Exception:
         raise HTTPException(status_code=404, detail="Video originale non disponibile.")
-    return FileResponse(p)
+    return _range_response(data, ct or "video/mp4", request)
 
 
 @api.get("/media/clip/{project_id}/{name}")
-async def media_clip(project_id: str, name: str, dl: int = 0):
+async def media_clip(project_id: str, name: str, request: Request, dl: int = 0):
     safe = sanitize_filename(name)
-    p = OUTPUT_DIR / project_id / safe
-    if not p.exists() or p.parent != (OUTPUT_DIR / project_id):
+    try:
+        data, ct = storage.get_bytes(storage.clip_path(project_id, safe))
+    except Exception:
         raise HTTPException(status_code=404, detail="Clip non trovata.")
-    if dl:
-        return FileResponse(p, media_type="video/mp4", filename=safe)
-    return FileResponse(p, media_type="video/mp4")
+    return _range_response(data, "video/mp4", request, filename=safe if dl else None)
 
 
 @api.get("/media/zip/{project_id}")
-async def media_zip(project_id: str):
-    p = ZIP_DIR / f"{sanitize_filename(project_id)}.zip"
-    if not p.exists():
+async def media_zip(project_id: str, request: Request):
+    try:
+        data, ct = storage.get_bytes(storage.zip_path(sanitize_filename(project_id)))
+    except Exception:
         raise HTTPException(status_code=404, detail="Archivio ZIP non disponibile.")
-    return FileResponse(p, media_type="application/zip", filename=f"clipforge_{project_id}.zip")
+    return _range_response(data, "application/zip", request, filename=f"clipforge_{project_id}.zip")
 
 
 # --------------------- processing ---------------------
@@ -224,40 +246,41 @@ async def run_job(job_id: str, manual: bool = False):
     job = Job(**jdoc)
     pdoc = await db.projects.find_one({"id": job.project_id}, {"_id": 0})
     if not pdoc:
-        job.status = "failed"
-        job.error = "Progetto non trovato."
-        await _save_job(job)
-        return
+        job.status = "failed"; job.error = "Progetto non trovato."
+        await _save_job(job); return
     project = Project(**pdoc)
-    video_path = UPLOAD_DIR / project.id / project.stored_filename
-    out_dir = OUTPUT_DIR / project.id
-    out_dir.mkdir(parents=True, exist_ok=True)
     settings = job.settings
 
-    job.status = "processing"
-    job.progress = 2
-    job.stage = "Preparazione"
+    work = WORK_DIR / job.id
+    work.mkdir(parents=True, exist_ok=True)
+    video_path = work / f"original{project.ext}"
+
+    job.status = "processing"; job.progress = 2; job.stage = "Preparazione"
     await _save_job(job)
 
     try:
+        storage.download_to(storage.orig_path(project.id, project.ext), video_path)
+
         segments = project.segments
         need_transcription = settings.subtitles or (settings.auto_find and not manual)
         if need_transcription and not segments and project.has_audio:
-            job.stage = "Trascrizione audio (Whisper)"
-            job.progress = 5
+            job.stage = "Trascrizione audio (Whisper)"; job.progress = 5
             await _save_job(job)
-            wav = out_dir / "audio.wav"
-            if await extract_audio(video_path, wav):
-                from transcription import transcribe
-                segments = await transcribe(wav)
-                wav.unlink(missing_ok=True)
-                await db.projects.update_one({"id": project.id}, {"$set": {"segments": segments}})
-            else:
+            try:
+                wav = work / "audio.wav"
+                if await extract_audio(video_path, wav):
+                    from transcription import transcribe
+                    segments = await transcribe(wav)
+                    wav.unlink(missing_ok=True)
+                    await db.projects.update_one({"id": project.id}, {"$set": {"segments": segments}})
+                else:
+                    segments = []
+            except Exception as e:
+                logger.warning("Trascrizione fallita, uso split uniforme: %s", e)
                 segments = []
         job.progress = 25
         await _save_job(job)
 
-        # decide clips
         if manual:
             clips = job.clips
         elif settings.auto_find and segments:
@@ -275,14 +298,13 @@ async def run_job(job_id: str, manual: bool = False):
         completed_files = []
 
         for i, clip in enumerate(clips):
-            clip.status = "processing"
-            clip.progress = 0
+            clip.status = "processing"; clip.progress = 0
             job.stage = f"Elaborazione clip {i + 1} di {total}"
             await _save_job(job)
 
             base = 25.0 + span * i
             filename = f"edit_{job.id[:8]}_{i + 1}.mp4" if manual else f"clip_{i + 1}.mp4"
-            out_path = out_dir / filename
+            out_path = work / filename
 
             async def progress_cb(pct, _clip=clip, _base=base):
                 _clip.progress = pct
@@ -291,27 +313,25 @@ async def run_job(job_id: str, manual: bool = False):
 
             try:
                 await render_clip(video_path, clip, settings, segments or [], out_path, progress_cb)
-                clip.status = "completed"
-                clip.progress = 100
-                clip.filename = filename
+                storage.put_file(storage.clip_path(project.id, filename), out_path, "video/mp4")
+                clip.status = "completed"; clip.progress = 100; clip.filename = filename
                 completed_files.append(filename)
-                # cleanup ass file
                 out_path.with_suffix(".ass").unlink(missing_ok=True)
             except Exception as e:
                 logger.exception("Render clip %s fallito", i)
-                clip.status = "failed"
-                clip.error = str(e)[:300]
+                clip.status = "failed"; clip.error = str(e)[:300]
             await _save_job(job)
 
         if completed_files and not manual:
-            job.zip_filename = make_zip(project.id, completed_files)
+            zip_local = work / f"{project.id}.zip"
+            make_zip(zip_local, work, completed_files)
+            storage.put_file(storage.zip_path(project.id), zip_local, "application/zip")
+            job.zip_filename = f"{project.id}.zip"
             await db.projects.update_one({"id": project.id},
                                          {"$set": {"clip_count": len(completed_files)}})
 
         if completed_files:
-            job.status = "completed"
-            job.progress = 100
-            job.stage = "Completato"
+            job.status = "completed"; job.progress = 100; job.stage = "Completato"
         else:
             job.status = "failed"
             job.error = job.error or "Nessuna clip è stata generata con successo."
@@ -320,10 +340,19 @@ async def run_job(job_id: str, manual: bool = False):
 
     except Exception as e:
         logger.exception("Job fallito")
-        job.status = "failed"
-        job.error = str(e)[:400]
-        job.stage = "Errore"
+        job.status = "failed"; job.error = str(e)[:400]; job.stage = "Errore"
         await _save_job(job)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+@app.on_event("startup")
+async def _startup():
+    try:
+        storage.init_storage()
+        logger.info("Object storage inizializzato.")
+    except Exception as e:
+        logger.error("Init object storage fallito: %s", e)
 
 
 app.include_router(api)

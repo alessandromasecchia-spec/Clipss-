@@ -85,6 +85,7 @@ Apri http://localhost:3000
 MONGO_URL="mongodb://localhost:27017"
 DB_NAME="clipforge"
 CORS_ORIGINS="*"
+EMERGENT_LLM_KEY="sk-emergent-xxxx"   # per l'object storage gestito da Emergent
 # opzionali
 WHISPER_MODEL_SIZE="base"     # tiny | base | small | medium
 WHISPER_COMPUTE_TYPE="int8"   # int8 | int8_float16 | float16 | float32
@@ -164,7 +165,7 @@ Nessun account, nessun analytics, nessun salvataggio permanente online. I video 
 - **Tracking volto**: viene calcolato il centro medio del volto sui frame campionati della clip e applicato un crop **centrato sul volto** (con smoothing implicito). Un tracking **per-frame** completamente dinamico (crop che segue il volto istante per istante) può essere aggiunto generando un'espressione `crop` tempo-variante o con `sendcmd`. Fallback al crop centrale se nessun volto è rilevato.
 - **Auto zoom**: zoom lento e leggero (`zoompan`) disattivabile. Per effetti "a battuta" servirebbe l'analisi degli onset audio.
 - **Whisper su CPU**: la qualità/velocità dipende dal modello (`tiny` più veloce, `small/medium` più accurati).
-- **Storage locale**: i file risiedono sul filesystem del server (design volutamente locale/temporaneo per la privacy). Per un **deploy cloud multi-istanza** occorrerebbe uno storage a oggetti condiviso (es. S3) — non necessario per l'uso personale/locale previsto.
+- **Storage**: i video originali, le clip esportate, le thumbnail e gli ZIP sono salvati su **object storage gestito da Emergent** (sorgente dati, con MongoDB come indice). L'elaborazione avviene su **file temporanei locali** scaricati al volo e cancellati subito dopo. Per un uso 100% offline/self-hosted senza object storage, si può sostituire `backend/storage.py` con scritture su filesystem locale.
 
 ## Struttura dei file
 
