@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --cf-bg: #0B0D11;
+    --cf-surface: #13161C;
+    --cf-card: #1A1D26;
+}
+
+body {
+    margin: 0;
+    background-color: var(--cf-bg);
+    color: #F1F5F9;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .font-display {
+    font-family: 'Outfit', sans-serif;
+}
+
+.font-mono, code {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+    :root {
+        --background: 222 18% 7%;
+        --foreground: 210 40% 96%;
+        --card: 222 16% 12%;
+        --card-foreground: 210 40% 96%;
+        --popover: 222 18% 10%;
+        --popover-foreground: 210 40% 96%;
+        --primary: 187 100% 50%;
+        --primary-foreground: 222 47% 6%;
+        --secondary: 222 14% 18%;
+        --secondary-foreground: 210 40% 96%;
+        --muted: 222 14% 16%;
+        --muted-foreground: 215 16% 62%;
+        --accent: 222 14% 18%;
+        --accent-foreground: 210 40% 96%;
+        --destructive: 350 89% 60%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 220 13% 20%;
+        --input: 220 13% 20%;
+        --ring: 187 100% 50%;
+        --radius: 0.75rem;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0B0D11; }
+::-webkit-scrollbar-thumb { background: #2a2f3a; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #384150; }
+
+::selection { background: rgba(0, 229, 255, 0.3); color: #fff; }
+
+.cf-grid-bg {
+    background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 44px 44px;
+}

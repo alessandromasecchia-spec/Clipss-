@@ -1,0 +1,113 @@
+{
+  "project_name": "ClipForge",
+  "app_type": "hybrid_fullstack",
+  "language": "Italian (UI text in Italian)",
+  "emotional_tone": "High-precision professional video editing studio, dark cinematic theme, fast, sleek, tactile CapCut/Descript alternative",
+  "theme": {
+    "mode": "dark",
+    "background_base": "#0B0D11",
+    "background_surface": "#13161C",
+    "background_card": "#1A1D26",
+    "background_card_hover": "#222632",
+    "border_subtle": "rgba(255, 255, 255, 0.07)",
+    "border_medium": "rgba(255, 255, 255, 0.14)",
+    "border_highlight": "rgba(56, 189, 248, 0.3)"
+  },
+  "colors": {
+    "primary": {
+      "cyan": "#00E5FF",
+      "cyan_hover": "#33ECFF",
+      "cyan_glow": "rgba(0, 229, 255, 0.2)"
+    },
+    "accent": {
+      "amber": "#FFB800",
+      "emerald": "#10B981",
+      "violet": "#8B5CF6",
+      "rose": "#F43F5E"
+    },
+    "neutrals": {
+      "bg_dark": "#0B0D11",
+      "surface": "#13161C",
+      "card": "#1A1D26",
+      "muted": "#8A94A6",
+      "text_primary": "#F1F5F9",
+      "text_secondary": "#94A3B8"
+    }
+  },
+  "typography": {
+    "heading_font": "Outfit, sans-serif",
+    "body_font": "Manrope, sans-serif",
+    "mono_font": "JetBrains Mono, monospace",
+    "hierarchy": {
+      "h1": "text-3xl md:text-4xl font-bold tracking-tight text-slate-100",
+      "h2": "text-xl md:text-2xl font-semibold tracking-tight text-slate-100",
+      "h3": "text-lg font-medium text-slate-200",
+      "body": "text-sm text-slate-300 leading-relaxed",
+      "caption": "text-xs text-slate-400 font-mono"
+    }
+  },
+  "key_features_layout": [
+    {
+      "step": 1,
+      "name": "Home Dashboard & Upload Area",
+      "description": "Hero section with ClipForge logo (Scissors + Play button), subtitle 'Trasforma i tuoi video in clip pronte per Shorts, Reels e TikTok', large drag-and-drop upload zone with support for MP4, MOV, MKV, AVI, sample video loader button, and a recent projects grid ('Progetti recenti') with thumbnails, clip counts, duration, date and context action menus."
+    },
+    {
+      "step": 2,
+      "name": "Uploaded Video Info Panel",
+      "description": "Card showing video summary details (Filename, duration, 4K/1080p resolution, FPS, file size, audio tracks), interactive video player preview with play/pause, and a prominent 'Continua alla configurazione' button."
+    },
+    {
+      "step": 3,
+      "name": "Impostazioni Clip Screen",
+      "description": "Settings view with Aspect Ratio selector (9:16 vertical, 16:9 landscape, 1:1 square), Clip Duration choices (15s, 30s, 45s, 60s, custom slider), Number of Clips (1, 3, 5, 10), and AI toggles for Sottotitoli automatici, Auto Zoom, Auto Crop, Tracking del volto, Normalizzazione audio, and 'Trova i momenti migliori' mode."
+    },
+    {
+      "step": 4,
+      "name": "Video Editor Workstation",
+      "description": "Professional 3-pane video workspace: Left = Canvas video preview with 9:16 safe-zone overlay and live subtitle preview; Right = Settings tabs (Ritaglio, Sottotitoli, Audio, Layout); Bottom = Multi-track timeline with scrubber playhead, In/Out trim handles, split, play/pause, volume, speed control (0.5x-2x), and timeline zoom slider."
+    },
+    {
+      "step": 5,
+      "name": "Subtitle Style Editor",
+      "description": "Subtitle customizer with style presets (Classico, Bold Highlight, Gaming Neon, Minimalist), live editable preview, font selection, text size slider, position Y control, fill color picker, background highlight toggle/color, text shadow and outline controls."
+    },
+    {
+      "step": 6,
+      "name": "Export & Queue Screen",
+      "description": "Batch processing queue showing real progress percentage bar ('Elaborazione 34%'), status per clip (Completata, In elaborazione, In coda), video preview dialog, individual download buttons, and 'Scarica tutte le clip (.zip)' button."
+    }
+  ],
+  "components_styling": {
+    "header": "Sticky glassmorphic bar (backdrop-blur-xl bg-[#0B0D11]/80 border-b border-white/10 z-50 py-3 px-6)",
+    "card": "bg-[#1A1D26] border border-white/10 rounded-xl p-5 hover:border-white/20 transition-all shadow-xl shadow-black/40",
+    "drag_drop_zone": "border-2 border-dashed border-cyan-500/30 hover:border-cyan-400 bg-[#13161C]/80 hover:bg-[#1A1D26] rounded-2xl p-10 text-center cursor-pointer transition-all group",
+    "timeline": "bg-[#13161C] border border-white/10 rounded-xl p-4 flex flex-col gap-3 relative overflow-hidden",
+    "primary_button": "bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold px-5 py-2.5 rounded-lg shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center justify-center gap-2",
+    "secondary_button": "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 px-4 py-2 rounded-lg active:scale-95 transition-all",
+    "badge": "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2.5 py-0.5 rounded-full text-xs font-mono font-medium"
+  },
+  "image_urls": {
+    "video_thumbnails": [
+      {
+        "url": "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2ODh8MHwxfHNlYXJjaHwxfHx2aWRlbyUyMGVkaXRpbmclMjBzb2Z0d2FyZSUyMHRpbWVsaW5lJTIwaW50ZXJmYWNlJTIwcHJldmlld3xlbnwwfHx8fDE3OTA3Njg0NDJ8MA&ixlib=rb-4.1.0&q=85",
+        "category": "project_thumbnail",
+        "description": "Video editing software timeline interface with colorful clips"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1614963326505-843868e1d83a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2ODh8MHwxfHNlYXJjaHwzfHx2aWRlbyUyMGVkaXRpbmclMjBzb2Z0d2FyZSUyMHRpbWVsaW5lJTIwaW50ZXJmYWNlJTIwcHJldmlld3xlbnwwfHx8fDE3OTA3Njg0NDJ8MA&ixlib=rb-4.1.0&q=85",
+        "category": "demo_video_preview",
+        "description": "Computer screen showing video editing timeline preview"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Ensure the entire app is in Italian language with accurate terminology ('Trascina qui il tuo video', 'Sottotitoli', 'Esporta clip', 'Piattaforme destinate', etc.).",
+    "Implement clear flow state navigation (Upload -> Info Panel -> Impostazioni Clip -> Editor Workspace -> Subtitle Styling -> Queue Export) so all key functionalities can be tested smoothly.",
+    "Add 'data-testid' to all buttons, input sliders, toggles, trim handles, project cards, and export progress elements for test automation.",
+    "Do NOT use transparent backgrounds on headers, dropdown menus or floating dialogs; use glassmorphism with backdrop blur and explicit dark background opacity.",
+    "Include sample media assets (like built-in demo video clips) so users can test the editor without having to upload a large local file if they prefer.",
+    "Keep the dark-mode aesthetic clean, with cyan `#00E5FF` high-visibility highlights, slate dark cards, and JetBrains Mono timestamps."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": "Follow dark mode professional video editor aesthetics, no purple AI gradients, generous spacing, explicit interactive state styling, and full data-testid coverage."
+}
