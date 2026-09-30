@@ -112,6 +112,33 @@ export const SubtitleStyleEditor = ({ style, onChange }) => {
         </div>
       </div>
 
+      <div className="flex items-center justify-between bg-[#13161C] border border-white/10 rounded-lg px-3.5 py-2.5">
+        <div>
+          <p className="text-sm text-slate-200">Word Highlight</p>
+          <p className="text-xs text-slate-500">Evidenzia la parola pronunciata (timestamp Whisper)</p>
+        </div>
+        <Switch checked={!!style.word_highlight} onCheckedChange={(v) => set({ word_highlight: v })} data-testid="subtitle-word-highlight" />
+      </div>
+
+      {style.word_highlight && (
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-slate-500 font-mono">Colore evidenziazione</Label>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {["#FFE600", "#00E5FF", "#10B981", "#F43F5E", "#FF7A00", "#FFFFFF"].map((c) => (
+              <button key={c} onClick={() => set({ highlight_color: c })}
+                data-testid={`subtitle-hl-${c}`}
+                className={`w-7 h-7 rounded-full border-2 transition-all ${style.highlight_color === c ? "border-cyan-400 scale-110" : "border-white/20"}`}
+                style={{ backgroundColor: c }} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <Label className="text-xs uppercase tracking-wide text-slate-500 font-mono">Parole per riga · {style.max_words_per_line}</Label>
+        <Slider min={1} max={8} step={1} value={[style.max_words_per_line]} onValueChange={([v]) => set({ max_words_per_line: v })} className="mt-3" data-testid="subtitle-wpl" />
+      </div>
+
       <div className="grid grid-cols-1 gap-3">
         <ToggleRow label="Grassetto" checked={style.bold} onChange={(v) => set({ bold: v })} testid="subtitle-bold" />
         <ToggleRow label="Ombra" checked={style.shadow} onChange={(v) => set({ shadow: v })} testid="subtitle-shadow" />

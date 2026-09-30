@@ -39,13 +39,20 @@ PRESET_DEFAULTS = {
 }
 
 
-def build_ass(segments: list, style, clip_start: float, clip_end: float,
-              out_path: Path, video_w: int = 1080, video_h: int = 1920) -> Path:
-    """Create an .ass subtitle file for the clip. `segments` are absolute-timed
-    transcription segments; timestamps are shifted to be relative to clip_start."""
+def _clean(t: str) -> str:
+    return (t or "").strip().replace("\n", " ").replace("{", "(").replace("}", ")")
+
+
+def build_ass(lines: list, style, out_path: Path,
+              video_w: int = 1080, video_h: int = 1920) -> Path:
+    """Render caption `lines` (already in the OUTPUT timeline, 0-based) to an .ass
+    file. Each line: {start, end, text, words:[{start,end,word}]}. When
+    style.word_highlight is on, the currently spoken word is coloured using the
+    real Whisper word timestamps."""
     primary = _hex_to_ass(style.color)
+    hl = _hex_to_ass(style.highlight_color)
     outline_col = _hex_to_ass("#000000")
-    back_col = _hex_to_ass(style.bg_color, "40")  # semi-transparent box
+    back_col = _hex_to_ass(style.bg_color, "40")
 
     border_style = 3 if style.background else 1
     outline = max(0, style.outline)
@@ -69,20 +76,30 @@ Style: Default,{style.font},{style.size},{primary},{primary},{outline_col},{back
 Format: Layer, Start, End, Style, MarginL, MarginR, Effect, Text
 """
 
-    lines = []
-    for seg in segments:
-        s = seg["start"]
-        e = seg["end"]
-        if e <= clip_start or s >= clip_end:
-            continue
-        rs = max(0.0, s - clip_start)
-        re_ = min(clip_end, e) - clip_start
-        text = (seg.get("text") or "").strip().replace("\n", " ")
+    events = []
+    for ln in lines:
+        words = ln.get("words") or []
+        text = _clean(ln.get("text", ""))
         if not text:
             continue
-        # ASS escape
-        text = text.replace("{", "(").replace("}", ")")
-        lines.append(f"Dialogue: 0,{_ts(rs)},{_ts(re_)},Default,,0,0,0,,{text}")
+        if style.word_highlight and words:
+            n = len(words)
+            for i, w in enumerate(words):
+                w_start = w["start"]
+                w_end = words[i + 1]["start"] if i + 1 < n else ln["end"]
+                if w_end <= w_start:
+                    w_end = w_start + 0.15
+                parts = []
+                for j, wj in enumerate(words):
+                    tok = _clean(wj["word"]).strip()
+                    if j == i:
+                        parts.append(f"{{\\c{hl}}}{tok}{{\\c{primary}}}")
+                    else:
+                        parts.append(tok)
+                line_text = " ".join(parts)
+                events.append(f"Dialogue: 0,{_ts(w_start)},{_ts(w_end)},Default,,0,0,0,,{line_text}")
+        else:
+            events.append(f"Dialogue: 0,{_ts(ln['start'])},{_ts(ln['end'])},Default,,0,0,0,,{text}")
 
-    out_path.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
+    out_path.write_text(header + "\n".join(events) + "\n", encoding="utf-8")
     return out_path

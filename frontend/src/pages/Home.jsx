@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { Sparkles, FolderClock, ShieldCheck, Zap } from "lucide-react";
+import { Sparkles, FolderClock, ShieldCheck, Zap, Layers } from "lucide-react";
 import Header from "@/components/Header";
 import DropZone from "@/components/DropZone";
 import ProjectCard from "@/components/ProjectCard";
 import { Logo } from "@/components/Logo";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -65,7 +66,12 @@ export default function Home() {
 
   return (
     <div>
-      <Header />
+      <Header right={
+        <Button variant="secondary" onClick={() => navigate("/batch")} data-testid="nav-batch-btn"
+          className="bg-slate-800 hover:bg-slate-700 border border-white/10 h-9">
+          <Layers size={15} className="mr-1.5 text-cyan-400" /> Coda batch
+        </Button>
+      } />
       <main className="max-w-7xl mx-auto px-5 md:px-8 py-10 md:py-16">
         <section className="text-center max-w-3xl mx-auto">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-center mb-6">

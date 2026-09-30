@@ -83,3 +83,7 @@ def clip_path(pid: str, filename: str) -> str:
 
 def zip_path(pid: str) -> str:
     return f"{APP_NAME}/zips/{pid}.zip"
+
+
+def asset_path(pid: str, name: str) -> str:
+    return f"{APP_NAME}/uploads/{pid}/assets/{name}"

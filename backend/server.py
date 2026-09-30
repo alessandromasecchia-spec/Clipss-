@@ -25,6 +25,7 @@ db = client[os.environ["DB_NAME"]]
 
 app = FastAPI(title="ClipForge")
 api = APIRouter(prefix="/api")
+_JOB_SEM = asyncio.Semaphore(1)  # process one heavy job at a time (batch queue)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -226,6 +227,38 @@ async def render_single(project_id: str, payload: dict = Body(...)):
     return job.model_dump()
 
 
+AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac"}
+IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+@api.post("/projects/{project_id}/audio")
+async def upload_audio(project_id: str, file: UploadFile = File(...)):
+    await _get_project(project_id)
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in AUDIO_EXT:
+        raise HTTPException(status_code=400, detail="Formato audio non supportato (usa MP3, WAV, M4A, AAC).")
+    data = await file.read()
+    if len(data) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File audio troppo grande (max 100MB).")
+    name = sanitize_filename(file.filename or f"audio{ext}")
+    storage.put_bytes(storage.asset_path(project_id, name), data, file.content_type or "audio/mpeg")
+    return {"name": name}
+
+
+@api.post("/projects/{project_id}/overlay")
+async def upload_overlay(project_id: str, file: UploadFile = File(...)):
+    await _get_project(project_id)
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in IMAGE_EXT:
+        raise HTTPException(status_code=400, detail="Formato immagine non supportato (usa PNG, JPG, WEBP).")
+    data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Immagine troppo grande (max 20MB).")
+    name = sanitize_filename(file.filename or f"overlay{ext}")
+    storage.put_bytes(storage.asset_path(project_id, name), data, file.content_type or "image/png")
+    return {"name": name}
+
+
 @api.get("/jobs/{job_id}")
 async def get_job(job_id: str):
     j = await db.jobs.find_one({"id": job_id}, {"_id": 0})
@@ -255,11 +288,21 @@ async def run_job(job_id: str, manual: bool = False):
     work.mkdir(parents=True, exist_ok=True)
     video_path = work / f"original{project.ext}"
 
-    job.status = "processing"; job.progress = 2; job.stage = "Preparazione"
+    job.status = "queued"; job.progress = 0; job.stage = "In coda"
     await _save_job(job)
+    await _JOB_SEM.acquire()
 
+    music_local = overlay_local = None
     try:
+        job.status = "processing"; job.progress = 2; job.stage = "Preparazione"
+        await _save_job(job)
         storage.download_to(storage.orig_path(project.id, project.ext), video_path)
+        if settings.music:
+            music_local = work / f"music_{settings.music.name}"
+            storage.download_to(storage.asset_path(project.id, settings.music.name), music_local)
+        if settings.overlay:
+            overlay_local = work / f"overlay_{settings.overlay.name}"
+            storage.download_to(storage.asset_path(project.id, settings.overlay.name), overlay_local)
 
         segments = project.segments
         need_transcription = settings.subtitles or (settings.auto_find and not manual)
@@ -284,7 +327,8 @@ async def run_job(job_id: str, manual: bool = False):
         if manual:
             clips = job.clips
         elif settings.auto_find and segments:
-            clips = select_auto_clips(segments, settings.num_clips, float(settings.clip_duration))
+            clips = select_auto_clips(segments, settings.num_clips, float(settings.clip_duration),
+                                      total=project.duration)
             if not clips:
                 clips = uniform_clips(project.duration, settings.num_clips, float(settings.clip_duration))
         else:
@@ -312,7 +356,9 @@ async def run_job(job_id: str, manual: bool = False):
                 await _save_job(job)
 
             try:
-                await render_clip(video_path, clip, settings, segments or [], out_path, progress_cb)
+                await render_clip(video_path, clip, settings, segments or [], out_path, progress_cb,
+                                  music_path=music_local, overlay_path=overlay_local,
+                                  has_audio=project.has_audio)
                 storage.put_file(storage.clip_path(project.id, filename), out_path, "video/mp4")
                 clip.status = "completed"; clip.progress = 100; clip.filename = filename
                 completed_files.append(filename)
@@ -343,6 +389,7 @@ async def run_job(job_id: str, manual: bool = False):
         job.status = "failed"; job.error = str(e)[:400]; job.stage = "Errore"
         await _save_job(job)
     finally:
+        _JOB_SEM.release()
         shutil.rmtree(work, ignore_errors=True)
 
 

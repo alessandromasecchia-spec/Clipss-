@@ -255,7 +255,15 @@ export const Editor = ({ project, open, clip, baseSettings, onClose, onRender })
 
         <div className="px-5 py-3.5 border-t border-white/10 flex items-center justify-between">
           <span className="text-sm text-slate-400 font-mono">Clip: {fmt(start)} → {fmt(end)} · {formatDuration(clipLen)}</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <Select value={settings.export_preset || "social_hq"} onValueChange={(v) => setSettings((s) => ({ ...s, export_preset: v }))}>
+              <SelectTrigger className="w-36 h-9 bg-[#13161C] border-white/10" data-testid="editor-export-preset"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="social_hq">Social HQ</SelectItem>
+                <SelectItem value="social_small">Social Small</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
             <Button variant="secondary" onClick={onClose} className="bg-slate-800 border border-white/10" data-testid="editor-cancel">Annulla</Button>
             <Button onClick={handleRender} data-testid="editor-render" className="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold">
               <Save size={16} className="mr-1.5" /> Esporta clip

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import Home from "@/pages/Home";
 import Workspace from "@/pages/Workspace";
+import BatchQueue from "@/pages/BatchQueue";
 
 function App() {
   return (
@@ -11,6 +12,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/project/:id" element={<Workspace />} />
+          <Route path="/batch" element={<BatchQueue />} />
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" richColors theme="dark" />

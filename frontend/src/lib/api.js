@@ -24,4 +24,14 @@ export const api = {
   process: (id, settings) => http.post(`/projects/${id}/process`, settings),
   renderClip: (id, payload) => http.post(`/projects/${id}/render-clip`, payload),
   getJob: (jobId) => http.get(`/jobs/${jobId}`),
+  uploadAudio: (id, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return http.post(`/projects/${id}/audio`, form, { headers: { "Content-Type": "multipart/form-data" } });
+  },
+  uploadOverlay: (id, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return http.post(`/projects/${id}/overlay`, form, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
