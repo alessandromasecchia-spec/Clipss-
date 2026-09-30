@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Type, Check } from "lucide-react";
+import CaptionPreview from "@/components/CaptionPreview";
 
 const PRESETS = {
   classic: { label: "Classic", mode: "static", animation: "fade", size: 58, color: "#FFFFFF", bold: true, outline: 3, shadow: true, background: false },
@@ -37,44 +39,51 @@ export const SubtitleStyleEditor = ({ style, onChange }) => {
   const set = (patch) => onChange({ ...style, ...patch });
   const applyPreset = (key) => { const { label, ...rest } = PRESETS[key]; set({ preset: key, ...rest }); };
 
+  // Merge a preset's fields onto a neutral base so each card shows ITS OWN look.
+  const presetStyle = (key) => {
+    const { label, ...rest } = PRESETS[key];
+    return { font: style.font, position: "center", alignment: "center", size: 60, ...rest };
+  };
+
+  // Cycle the active word so per-word effects (highlight/pop/scale/glow/karaoke) are visible.
+  const [active, setActive] = useState(1);
+  useEffect(() => {
+    const iv = setInterval(() => setActive((a) => (a + 1) % 3), 900);
+    return () => clearInterval(iv);
+  }, []);
+
   const previewJustify = style.alignment === "left" ? "flex-start" : style.alignment === "right" ? "flex-end" : "center";
-  const previewAlign = style.position === "top" ? "flex-start" : style.position === "center" ? "center" : "flex-end";
+  const previewAlign = style.position === "top" || style.position === "upper" ? "flex-start"
+    : style.position === "center" ? "center" : "flex-end";
 
   return (
     <div className="space-y-5" data-testid="subtitle-style-editor">
-      {/* live preview */}
-      <div className="relative rounded-lg overflow-hidden border border-white/10 bg-black h-40 flex p-3"
-           style={{ justifyContent: previewJustify, alignItems: previewAlign }}>
+      {/* live preview — driven by the real caption config (single source of truth) */}
+      <div className="relative rounded-lg overflow-hidden border border-white/10 bg-black h-40 flex p-4"
+           style={{ justifyContent: previewJustify, alignItems: previewAlign }}
+           data-testid="subtitle-live-preview">
         <div className="absolute inset-0 opacity-30 bg-gradient-to-br from-slate-700 to-slate-900" />
-        <span
-          className="relative px-2 py-0.5 leading-tight text-center max-w-[90%]"
-          style={{
-            fontFamily: style.font,
-            fontWeight: style.bold ? 800 : 500,
-            fontSize: Math.max(14, style.size * 0.32),
-            color: style.color,
-            backgroundColor: style.background ? style.bg_color : "transparent",
-            textShadow: style.shadow ? "2px 2px 4px rgba(0,0,0,0.9)" : "none",
-            WebkitTextStroke: style.outline > 0 ? `${Math.min(2, style.outline * 0.4)}px #000` : "none",
-          }}
-        >
-          Esempio di sottotitolo
-        </span>
+        <div className="relative max-w-[92%]">
+          <CaptionPreview style={style} words={["TO", "GET", "STARTED"]} activeIndex={active} baseFont={30} />
+        </div>
       </div>
 
-      {/* presets */}
+      {/* presets — each card renders through the SAME engine as the video */}
       <div>
         <Label className="text-xs uppercase tracking-wide text-slate-500 font-mono">Stile predefinito</Label>
-        <div className="grid grid-cols-4 gap-2 mt-2">
+        <div className="grid grid-cols-3 gap-2 mt-2">
           {Object.entries(PRESETS).map(([key, p]) => (
             <button
               key={key} onClick={() => applyPreset(key)}
               data-testid={`subtitle-preset-${key}`}
-              className={`relative rounded-lg border px-2 py-2.5 text-xs font-semibold transition-all
-                ${style.preset === key ? "border-cyan-400 bg-cyan-500/10 text-cyan-300" : "border-white/10 bg-white/5 text-slate-300 hover:border-white/25"}`}
+              className={`relative rounded-lg border p-2 flex flex-col items-center gap-1.5 transition-all overflow-hidden
+                ${style.preset === key ? "border-cyan-400 bg-cyan-500/10" : "border-white/10 bg-black/40 hover:border-white/25"}`}
             >
-              {style.preset === key && <Check size={12} className="absolute top-1 right-1 text-cyan-400" />}
-              {p.label}
+              {style.preset === key && <Check size={12} className="absolute top-1 right-1 text-cyan-400 z-10" />}
+              <div className="h-9 w-full flex items-center justify-center overflow-hidden">
+                <CaptionPreview style={presetStyle(key)} words={["TO", "GET"]} activeIndex={active % 2} baseFont={13} />
+              </div>
+              <span className={`text-[11px] font-semibold ${style.preset === key ? "text-cyan-300" : "text-slate-300"}`}>{p.label}</span>
             </button>
           ))}
         </div>

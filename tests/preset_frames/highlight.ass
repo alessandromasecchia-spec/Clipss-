@@ -1,0 +1,16 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,DejaVu Sans,66,&H00FFFFFF,&H0015CCFA,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,5,70,70,0,1
+
+[Events]
+Format: Layer, Start, End, Style, MarginL, MarginR, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.35,Default,,0,0,0,,{\fscx82\fscy82\t(0,180,\fscx100\fscy100)}{\c&H0015CCFA}TO{\r} GET STARTED
+Dialogue: 0,0:00:00.35,0:00:00.90,Default,,0,0,0,,{\fscx82\fscy82\t(0,180,\fscx100\fscy100)}TO {\c&H0015CCFA}GET{\r} STARTED
+Dialogue: 0,0:00:00.90,0:00:02.00,Default,,0,0,0,,{\fscx82\fscy82\t(0,180,\fscx100\fscy100)}TO GET {\c&H0015CCFA}STARTED{\r}

@@ -84,3 +84,9 @@ android-sdk/
 # overlay black-box crash/user-report dumps — session data, never history
 **/.emergent/recordings/
 backend/storage/models/blobs/0c/0c4d8d814973160f53608ff0aa1618a90abbce9ed632bbc54930475ba82ce973
+.env
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
