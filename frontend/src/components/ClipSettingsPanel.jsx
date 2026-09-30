@@ -113,11 +113,12 @@ export const ClipSettingsPanel = ({ settings, onChange, onGenerate, project, sub
         </Section>
 
         {/* AUTO CLIP hero */}
-        <button
-          onClick={() => set({ auto_find: !settings.auto_find })}
-          disabled={noAudio}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => !noAudio && set({ auto_find: !settings.auto_find })}
           data-testid="autofind-toggle"
-          className={`w-full text-left rounded-xl border p-4 flex items-start gap-3.5 transition-all
+          className={`w-full text-left rounded-xl border p-4 flex items-start gap-3.5 transition-all cursor-pointer
             ${settings.auto_find && !noAudio ? "border-cyan-400 bg-cyan-500/10" : "border-white/10 bg-[#1A1D26] hover:border-white/25"}
             ${noAudio ? "opacity-50 cursor-not-allowed" : ""}`}
         >
@@ -127,14 +128,16 @@ export const ClipSettingsPanel = ({ settings, onChange, onGenerate, project, sub
           <div className="flex-1">
             <div className="flex items-center justify-between">
               <p className="font-semibold text-slate-100">Trova automaticamente le clip migliori</p>
-              <Switch checked={settings.auto_find && !noAudio} disabled={noAudio} onCheckedChange={(v) => set({ auto_find: v })} />
+              <span onClick={(e) => e.stopPropagation()}>
+                <Switch checked={settings.auto_find && !noAudio} disabled={noAudio} onCheckedChange={(v) => set({ auto_find: v })} />
+              </span>
             </div>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
               Analizza la trascrizione (frasi complete, domande, ritmo del parlato, parole chiave) per selezionare
               i segmenti più interessanti. {noAudio && "Non disponibile: il video non ha audio."}
             </p>
           </div>
-        </button>
+        </div>
 
         <Section title="Formato">
           <div className="grid grid-cols-3 gap-3">

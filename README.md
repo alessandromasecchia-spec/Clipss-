@@ -160,6 +160,22 @@ Nessun account, nessun analytics, nessun salvataggio permanente online. I video 
 
 ---
 
+## Fase 6 — Auto Edit Pro
+
+Costruita sopra l'MVP esistente, aggiunge un vero auto-editor:
+
+- **Template Auto Edit**: Podcast, Talking Head, Gaming, Minimal — impostano realmente i parametri della pipeline.
+- **Silence Removal** (OFF/Leggero/Medio/Aggressivo): rileva i silenzi con `ffmpeg silencedetect` e **taglia davvero** il video (trim + concat), con padding naturale attorno ai tagli.
+- **Smart Zoom** (OFF/Leggero/Medio/Forte) con modalità **Normal / Punch In / Punch Out**: zoom graduali (`zoompan`) agganciati agli inizi frase, non casuali.
+- **Face tracking con smoothing**: crop verticale che segue il volto nel tempo (espressione crop tempo-variante), fallback al centro se nessun volto.
+- **Word Highlight**: la parola pronunciata viene evidenziata usando i **timestamp reali di Whisper**; parole-per-riga configurabili (3–5 consigliato).
+- **Export presets**: Social HQ, Social Small, Custom (CRF).
+- **Musica di sottofondo**: upload MP3/WAV/M4A/AAC, volume, offset, fade in/out, loop, **mix reale** (`amix`).
+- **Image Overlay**: upload PNG/JPG/WEBP con posizione, scala, opacità, start/end — **composito reale** (`overlay`).
+- **Coda batch** (pagina `/batch`): più video elaborati **uno alla volta** (semaforo backend), con stato/progress/clip/ZIP per ciascuno.
+
+Endpoint aggiunti: `POST /api/projects/{id}/audio`, `POST /api/projects/{id}/overlay`. L'endpoint `POST /api/projects/{id}/process` accetta i nuovi campi (`template`, `silence_removal`, `smart_zoom`, `zoom_mode`, `export_preset`, `music`, `overlay`, ecc.) in modo retro-compatibile.
+
 ## Limiti tecnici noti (e come migliorarli)
 
 - **Tracking volto**: viene calcolato il centro medio del volto sui frame campionati della clip e applicato un crop **centrato sul volto** (con smoothing implicito). Un tracking **per-frame** completamente dinamico (crop che segue il volto istante per istante) può essere aggiunto generando un'espressione `crop` tempo-variante o con `sendcmd`. Fallback al crop centrale se nessun volto è rilevato.

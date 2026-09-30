@@ -35,6 +35,13 @@ Creator/editor singolo che vuole generare rapidamente clip verticali dai propri 
 - ✅ Test reali eseguiti: upload→process→2 clip 1080x1920 H.264 (verificato ffprobe); trascrizione Whisper + auto-clip a confini di frase + sottotitoli **verificati impressi** su frame estratto; ZIP generato; progress reale.
 - ✅ README completo (requisiti, installazione, FFmpeg, Whisper, avvio, config, troubleshooting, limiti).
 
+## Fase 6 — Auto Edit Pro (2026-06 / iter 2)
+- ✅ Backend reale: silence removal (silencedetect+trim/concat, taglio verificato 9.09s→6.0s / 20.84s gap-clip accorciato), smart zoom (normal/punch_in/punch_out via zoompan agganciato alle frasi), face tracking con smoothing (crop tempo-variante) + fallback centro, word-highlight sottotitoli con timestamp reali Whisper, parole-per-riga, export presets (social_hq/social_small/custom CRF), mix musica (amix + volume/offset/fade/loop), image overlay (posizione/scala/opacità/start-end), coda batch serializzata (asyncio.Semaphore(1)).
+- ✅ Endpoint aggiunti: POST /audio, POST /overlay; /process esteso retro-compatibile.
+- ✅ Frontend: pannello Auto Edit (template, silence, smart zoom+mode, export, musica, overlay, word-highlight, parole/riga), pulsante "Genera Auto Edit", pagina /batch multi-video, export preset nell'editor.
+- ✅ Testing agent: backend 8/8 (+9/9 precedenti), frontend 100% (tutti i testid, flusso completo, template, editor, batch). Fix bug LOW: rimosso <button> annidato (Switch) in autofind-toggle.
+- ⏸️ Rimandato (richiesta utente): editor avanzato Split/Delete/Undo/Redo timeline multi-segmento.
+
 ## Backlog / prossimi
 - P1: Tracking volto per-frame (crop tempo-variante) invece del centro medio.
 - P1: Sottotitoli parola-per-parola (karaoke) con evidenziazione.
