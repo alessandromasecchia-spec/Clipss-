@@ -5,6 +5,9 @@ import { formatDuration } from "@/lib/format";
 const STATUS = {
   queued: { icon: Clock3, cls: "text-slate-400", label: "In coda" },
   processing: { icon: Loader2, cls: "text-cyan-400 animate-spin", label: "Elaborazione" },
+  verifying: { icon: Loader2, cls: "text-amber-400 animate-spin", label: "Verifica" },
+  uploading: { icon: Loader2, cls: "text-sky-400 animate-spin", label: "Caricamento" },
+  ready: { icon: CheckCircle2, cls: "text-emerald-400", label: "Pronta" },
   completed: { icon: CheckCircle2, cls: "text-emerald-400", label: "Completata" },
   failed: { icon: XCircle, cls: "text-rose-400", label: "Errore" },
 };

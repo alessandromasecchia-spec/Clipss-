@@ -6,11 +6,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Body, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.middleware.cors import CORSMiddleware
 
-from config import ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES, THUMB_DIR, WORK_DIR
+from config import ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES, THUMB_DIR, WORK_DIR, CACHE_DIR
 from media import free_disk_bytes, generate_thumbnail, probe_video, sanitize_filename
 from models import ClipInfo, ClipSettings, Job, Project, new_id
 from pipeline import extract_audio, make_zip, render_clip, select_auto_clips, uniform_clips
@@ -114,7 +114,7 @@ async def upload_video(file: UploadFile = File(...)):
 
     # persist original to object storage (source of truth)
     try:
-        storage.put_bytes(storage.orig_path(project_id, ext), bytes(buf), ctype or "video/mp4")
+        await asyncio.to_thread(storage.put_bytes, storage.orig_path(project_id, ext), bytes(buf), ctype or "video/mp4")
     except Exception as e:
         logger.exception("Upload su object storage fallito")
         raise HTTPException(status_code=502, detail=f"Errore di archiviazione: {e}")
@@ -122,7 +122,7 @@ async def upload_video(file: UploadFile = File(...)):
     # ephemeral local copy (downloaded from storage) for probe + thumbnail
     tmp = WORK_DIR / f"probe_{project_id}{ext}"
     try:
-        storage.download_to(storage.orig_path(project_id, ext), tmp)
+        await asyncio.to_thread(storage.download_to, storage.orig_path(project_id, ext), tmp)
         try:
             meta = await probe_video(tmp)
         except ValueError as e:
@@ -130,7 +130,7 @@ async def upload_video(file: UploadFile = File(...)):
         await generate_thumbnail(tmp, project_id, at_sec=min(1.0, meta["duration"] / 2))
         thumb_local = THUMB_DIR / f"{project_id}.jpg"
         if thumb_local.exists():
-            storage.put_file(storage.thumb_path(project_id), thumb_local, "image/jpeg")
+            await asyncio.to_thread(storage.put_file, storage.thumb_path(project_id), thumb_local, "image/jpeg")
             thumb_local.unlink(missing_ok=True)
     finally:
         tmp.unlink(missing_ok=True)
@@ -158,46 +158,100 @@ async def delete_project(project_id: str):
     await _get_project(project_id)
     await db.projects.delete_one({"id": project_id})
     await db.jobs.delete_many({"project_id": project_id})
+    for pat in (f"orig_{project_id}*", f"thumb_{project_id}.jpg", f"clip_{project_id}_*", f"zip_{project_id}.zip"):
+        for f in CACHE_DIR.glob(pat):
+            f.unlink(missing_ok=True)
     return {"deleted": True}
 
 
 # --------------------- media serving ---------------------
+_cache_locks: dict = {}
+
+
+def _lock_for(key: str) -> asyncio.Lock:
+    lk = _cache_locks.get(key)
+    if lk is None:
+        lk = asyncio.Lock()
+        _cache_locks[key] = lk
+    return lk
+
+
+async def _serve_cached(object_path: str, local_path: Path, media_type: str,
+                        request: Request, filename: str = None, not_found: str = "File non disponibile."):
+    """Download the object to a local disk cache once (in a worker thread so the
+    event loop is never blocked), then serve it with real HTTP Range support
+    (206) by reading only the requested slice from local disk."""
+    if not (local_path.exists() and local_path.stat().st_size > 0):
+        async with _lock_for(str(local_path)):
+            if not (local_path.exists() and local_path.stat().st_size > 0):
+                tmp = local_path.with_suffix(local_path.suffix + ".part")
+                try:
+                    await asyncio.to_thread(storage.download_to, object_path, tmp)
+                    tmp.replace(local_path)
+                except Exception:
+                    tmp.unlink(missing_ok=True)
+                    raise HTTPException(status_code=404, detail=not_found)
+
+    file_size = local_path.stat().st_size
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=86400"}
+    if filename:
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    rng = request.headers.get("range") or request.headers.get("Range")
+    if rng and rng.startswith("bytes="):
+        try:
+            part = rng.split("=", 1)[1].split(",")[0]
+            s, e = part.split("-")
+            start = int(s) if s else 0
+            end = int(e) if e else file_size - 1
+            start = max(0, start)
+            end = min(end, file_size - 1)
+            if start > end:
+                start, end = 0, file_size - 1
+            length = end - start + 1
+
+            def _read():
+                with open(local_path, "rb") as f:
+                    f.seek(start)
+                    return f.read(length)
+
+            data = await asyncio.to_thread(_read)
+            headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            headers["Content-Length"] = str(length)
+            return Response(data, status_code=206, media_type=media_type, headers=headers)
+        except Exception:
+            pass
+    return FileResponse(local_path, media_type=media_type, filename=filename, headers=headers)
+
+
 @api.get("/media/thumb/{project_id}")
 async def media_thumb(project_id: str, request: Request):
-    try:
-        data, ct = storage.get_bytes(storage.thumb_path(sanitize_filename(project_id)))
-    except Exception:
-        raise HTTPException(status_code=404, detail="Anteprima non disponibile.")
-    return _range_response(data, "image/jpeg", request)
+    pid = sanitize_filename(project_id)
+    return await _serve_cached(storage.thumb_path(pid), CACHE_DIR / f"thumb_{pid}.jpg",
+                               "image/jpeg", request, not_found="Anteprima non disponibile.")
 
 
 @api.get("/media/original/{project_id}")
 async def media_original(project_id: str, request: Request):
     proj = await _get_project(project_id)
-    try:
-        data, ct = storage.get_bytes(storage.orig_path(project_id, proj["ext"]))
-    except Exception:
-        raise HTTPException(status_code=404, detail="Video originale non disponibile.")
-    return _range_response(data, ct or "video/mp4", request)
+    return await _serve_cached(storage.orig_path(project_id, proj["ext"]),
+                               CACHE_DIR / f"orig_{project_id}{proj['ext']}", "video/mp4", request,
+                               not_found="Video originale non disponibile.")
 
 
 @api.get("/media/clip/{project_id}/{name}")
 async def media_clip(project_id: str, name: str, request: Request, dl: int = 0):
     safe = sanitize_filename(name)
-    try:
-        data, ct = storage.get_bytes(storage.clip_path(project_id, safe))
-    except Exception:
-        raise HTTPException(status_code=404, detail="Clip non trovata.")
-    return _range_response(data, "video/mp4", request, filename=safe if dl else None)
+    return await _serve_cached(storage.clip_path(project_id, safe),
+                               CACHE_DIR / f"clip_{project_id}_{safe}", "video/mp4", request,
+                               filename=safe if dl else None, not_found="Clip non trovata.")
 
 
 @api.get("/media/zip/{project_id}")
 async def media_zip(project_id: str, request: Request):
-    try:
-        data, ct = storage.get_bytes(storage.zip_path(sanitize_filename(project_id)))
-    except Exception:
-        raise HTTPException(status_code=404, detail="Archivio ZIP non disponibile.")
-    return _range_response(data, "application/zip", request, filename=f"clipforge_{project_id}.zip")
+    pid = sanitize_filename(project_id)
+    return await _serve_cached(storage.zip_path(pid), CACHE_DIR / f"zip_{pid}.zip",
+                               "application/zip", request, filename=f"clipforge_{pid}.zip",
+                               not_found="Archivio ZIP non disponibile.")
 
 
 # --------------------- processing ---------------------
@@ -241,7 +295,7 @@ async def upload_audio(project_id: str, file: UploadFile = File(...)):
     if len(data) > 100 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File audio troppo grande (max 100MB).")
     name = sanitize_filename(file.filename or f"audio{ext}")
-    storage.put_bytes(storage.asset_path(project_id, name), data, file.content_type or "audio/mpeg")
+    await asyncio.to_thread(storage.put_bytes, storage.asset_path(project_id, name), data, file.content_type or "audio/mpeg")
     return {"name": name}
 
 
@@ -255,8 +309,65 @@ async def upload_overlay(project_id: str, file: UploadFile = File(...)):
     if len(data) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Immagine troppo grande (max 20MB).")
     name = sanitize_filename(file.filename or f"overlay{ext}")
-    storage.put_bytes(storage.asset_path(project_id, name), data, file.content_type or "image/png")
+    await asyncio.to_thread(storage.put_bytes, storage.asset_path(project_id, name), data, file.content_type or "image/png")
     return {"name": name}
+
+
+def _caption_cues(segments, words_per_line):
+    words = []
+    for seg in segments:
+        sw = seg.get("words") or []
+        if sw:
+            for w in sw:
+                words.append({"start": w["start"], "end": w["end"], "word": (w["word"] or "").strip(), "whole": False})
+        else:
+            words.append({"start": seg["start"], "end": seg["end"], "word": (seg["text"] or "").strip(), "whole": True})
+    words.sort(key=lambda x: x["start"])
+    groups, cur = [], []
+    for w in words:
+        cur.append(w)
+        if w["whole"] or len(cur) >= words_per_line or w["word"].endswith((".", "?", "!")):
+            groups.append(cur); cur = []
+    if cur:
+        groups.append(cur)
+    return [{"start": g[0]["start"], "end": max(g[-1]["end"], g[0]["start"] + 0.4),
+             "text": " ".join(x["word"] for x in g).strip()} for g in groups if any(x["word"] for x in g)]
+
+
+def _cue_ts(sec, vtt=False):
+    sec = max(0.0, sec)
+    h = int(sec // 3600); m = int((sec % 3600) // 60); s = int(sec % 60)
+    ms = int(round((sec - int(sec)) * 1000))
+    sep = "." if vtt else ","
+    return f"{h:02d}:{m:02d}:{s:02d}{sep}{ms:03d}"
+
+
+@api.get("/projects/{project_id}/captions")
+async def export_captions(project_id: str, fmt: str = "srt", words: int = 5):
+    p = await _get_project(project_id)
+    segs = p.get("segments")
+    if not segs:
+        raise HTTPException(status_code=404, detail="Trascrizione non disponibile. Genera prima delle clip con i sottotitoli attivi.")
+    cues = _caption_cues(segs, max(1, min(12, words)))
+    fmt = fmt.lower()
+    if fmt == "txt":
+        body = "\n".join(c["text"] for c in cues)
+        media = "text/plain"
+    elif fmt == "vtt":
+        lines = ["WEBVTT", ""]
+        for c in cues:
+            lines.append(f"{_cue_ts(c['start'], True)} --> {_cue_ts(c['end'], True)}")
+            lines.append(c["text"]); lines.append("")
+        body = "\n".join(lines); media = "text/vtt"
+    else:  # srt
+        lines = []
+        for i, c in enumerate(cues, 1):
+            lines.append(str(i))
+            lines.append(f"{_cue_ts(c['start'])} --> {_cue_ts(c['end'])}")
+            lines.append(c["text"]); lines.append("")
+        body = "\n".join(lines); media = "application/x-subrip"
+    return Response(body, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="clipforge_{project_id}.{fmt}"'})
 
 
 @api.get("/jobs/{job_id}")
@@ -270,6 +381,21 @@ async def get_job(job_id: str):
 # --------------------- job runner ---------------------
 async def _save_job(job: Job):
     await db.jobs.update_one({"id": job.id}, {"$set": job.model_dump()})
+
+
+async def _upload_with_retry(object_path: str, local_path: Path,
+                             content_type: str = "video/mp4", attempts: int = 3):
+    delay = 1.0
+    last = None
+    for _i in range(attempts):
+        try:
+            await asyncio.to_thread(storage.put_file, object_path, local_path, content_type)
+            return
+        except Exception as e:
+            last = e
+            await asyncio.sleep(delay)
+            delay *= 2
+    raise RuntimeError(f"Upload su storage fallito dopo {attempts} tentativi: {last}")
 
 
 async def run_job(job_id: str, manual: bool = False):
@@ -296,13 +422,13 @@ async def run_job(job_id: str, manual: bool = False):
     try:
         job.status = "processing"; job.progress = 2; job.stage = "Preparazione"
         await _save_job(job)
-        storage.download_to(storage.orig_path(project.id, project.ext), video_path)
+        await asyncio.to_thread(storage.download_to, storage.orig_path(project.id, project.ext), video_path)
         if settings.music:
             music_local = work / f"music_{settings.music.name}"
-            storage.download_to(storage.asset_path(project.id, settings.music.name), music_local)
+            await asyncio.to_thread(storage.download_to, storage.asset_path(project.id, settings.music.name), music_local)
         if settings.overlay:
             overlay_local = work / f"overlay_{settings.overlay.name}"
-            storage.download_to(storage.asset_path(project.id, settings.overlay.name), overlay_local)
+            await asyncio.to_thread(storage.download_to, storage.asset_path(project.id, settings.overlay.name), overlay_local)
 
         segments = project.segments
         need_transcription = settings.subtitles or (settings.auto_find and not manual)
@@ -359,7 +485,16 @@ async def run_job(job_id: str, manual: bool = False):
                 await render_clip(video_path, clip, settings, segments or [], out_path, progress_cb,
                                   music_path=music_local, overlay_path=overlay_local,
                                   has_audio=project.has_audio)
-                storage.put_file(storage.clip_path(project.id, filename), out_path, "video/mp4")
+                clip.status = "verifying"
+                await _save_job(job)
+                if not out_path.exists() or out_path.stat().st_size == 0:
+                    raise RuntimeError("File di output vuoto o mancante.")
+                meta = await probe_video(out_path)
+                if meta.get("duration", 0) <= 0:
+                    raise RuntimeError("Clip non riproducibile (durata nulla).")
+                clip.status = "uploading"
+                await _save_job(job)
+                await _upload_with_retry(storage.clip_path(project.id, filename), out_path, "video/mp4")
                 clip.status = "completed"; clip.progress = 100; clip.filename = filename
                 completed_files.append(filename)
                 out_path.with_suffix(".ass").unlink(missing_ok=True)
@@ -370,8 +505,8 @@ async def run_job(job_id: str, manual: bool = False):
 
         if completed_files and not manual:
             zip_local = work / f"{project.id}.zip"
-            make_zip(zip_local, work, completed_files)
-            storage.put_file(storage.zip_path(project.id), zip_local, "application/zip")
+            await asyncio.to_thread(make_zip, zip_local, work, completed_files)
+            await _upload_with_retry(storage.zip_path(project.id), zip_local, "application/zip")
             job.zip_filename = f"{project.id}.zip"
             await db.projects.update_one({"id": project.id},
                                          {"$set": {"clip_count": len(completed_files)}})

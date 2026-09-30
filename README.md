@@ -160,6 +160,33 @@ Nessun account, nessun analytics, nessun salvataggio permanente online. I video 
 
 ---
 
+## Fase 6.5 — Fix caricamento clip + Caption Studio Pro
+
+### Fix critico: clip che si bloccavano nel caricamento
+**Causa reale individuata:** gli endpoint di serving media erano `async` ma chiamavano I/O bloccante (`requests` via `storage.get_bytes`) **dentro l'event loop**, e `_range_response` caricava **l'intero file in RAM ad ogni richiesta Range** → ogni seek riscaricava tutto e **bloccava l'event loop** (job polling e altre richieste si congelavano). Anche `run_job` faceva download/upload storage bloccanti sul loop.
+
+**Fix applicato:**
+- Cache su disco locale: l'oggetto viene scaricato **una sola volta** in un worker thread (`asyncio.to_thread`) → l'event loop non si blocca mai.
+- Serving con **HTTP Range reale (206)** leggendo solo la fetta richiesta dal file in cache (Accept-Ranges, Content-Range, Content-Length) → seek/preview fluidi, memoria minima.
+- Tutte le operazioni storage in `run_job`/upload/asset spostate su thread.
+- **Stati clip reali**: processing → verifying (ffprobe: file esiste, size>0, durata>0, stream video) → uploading (con **retry + backoff** 3 tentativi) → completed. Nessuna clip è "pronta" se non è realmente riproducibile.
+- **Timeout** reale sull'export FFmpeg (watchdog) → nessun job resta bloccato in eterno.
+- Frontend: stati distinti nella coda (Verifica/Caricamento), player con reload-once su errore.
+
+Verificato: **10/10 iterazioni** stabili (full 200, range 206, API reattiva durante caricamenti concorrenti), riapertura progetti OK.
+
+### Caption Studio Pro
+- **Word-level timing** dai timestamp reali di faster-whisper (nessuna stima).
+- **Modalità caption**: Static, Word by word, Highlight, Karaoke, Pop, Scale, Box, Glow, Hormozi, Minimal.
+- **12 preset** originali: Classic, Bold, Minimal, Gaming, Karaoke, Highlight, Pop, Scale, Box, Glow, Hormozi, Clean.
+- **Animazioni** (rese realmente via ASS): none, fade, pop, scale, word_pop, karaoke (slide/bounce/typewriter → fallback fade); intensità Subtle/Normal/Strong.
+- **Word highlight** sincronizzato ai timestamp (colore + scala + glow sulla parola attiva); parole-per-riga configurabili.
+- Controlli stile: font, dimensione, colori (testo/evidenziazione/outline), outline, ombra/blur, background (box), posizione (Top/Upper/Center/Lower/Bottom), allineamento, maiuscolo, tracking.
+- **Export sottotitoli**: `GET /api/projects/{id}/captions?fmt=srt|vtt|txt` (oltre al burn-in nel MP4).
+- Il rendering finale usa **ASS dinamico + FFmpeg** (nessuno screenshot del testo).
+
+Rimandato a iterazione dedicata (per ampiezza): editor caption timeline avanzato (split/merge/drag, correzione manuale testo per-parola, per-word style, auto-emoji, traduzione multilingua). L'architettura dati è pronta (config caption strutturata).
+
 ## Fase 6 — Auto Edit Pro
 
 Costruita sopra l'MVP esistente, aggiunge un vero auto-editor:

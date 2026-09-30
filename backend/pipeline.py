@@ -417,19 +417,30 @@ async def render_clip(video_path: Path, clip: ClipInfo, settings, segments, out_
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     assert proc.stdout is not None
-    while True:
-        line = await proc.stdout.readline()
-        if not line:
-            break
-        s = line.decode("utf-8", "ignore").strip()
-        if s.startswith("out_time_ms="):
-            try:
-                ms = int(s.split("=", 1)[1])
-                pct = int(min(99, (ms / 1_000_000) / eff * 100))
-                await progress_cb(pct)
-            except Exception:
-                pass
-    _out, err = await proc.communicate()
+
+    async def _pump():
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+            s = line.decode("utf-8", "ignore").strip()
+            if s.startswith("out_time_ms="):
+                try:
+                    ms = int(s.split("=", 1)[1])
+                    pct = int(min(99, (ms / 1_000_000) / eff * 100))
+                    await progress_cb(pct)
+                except Exception:
+                    pass
+        return await proc.communicate()
+
+    try:
+        _out, err = await asyncio.wait_for(_pump(), timeout=max(300.0, eff * 12))
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        raise RuntimeError("Timeout durante l'export FFmpeg.")
     err_tail = err.decode("utf-8", "ignore")[-600:] if err else ""
     if proc.returncode != 0 or not out_path.exists():
         raise RuntimeError(f"FFmpeg export fallito: {err_tail}")

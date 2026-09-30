@@ -13,20 +13,34 @@ def new_id() -> str:
 
 
 class SubtitleStyle(BaseModel):
-    preset: Literal["classico", "bold", "gaming", "minimal"] = "bold"
+    preset: str = "bold"
+    mode: Literal["static", "word_by_word", "highlight", "karaoke", "pop",
+                  "scale", "box", "glow", "hormozi", "minimal"] = "highlight"
+    animation: Literal["none", "fade", "pop", "scale", "slide_up", "slide_down",
+                       "bounce", "typewriter", "word_pop", "karaoke"] = "fade"
+    animation_intensity: Literal["subtle", "normal", "strong"] = "normal"
     font: str = "DejaVu Sans"
     size: int = 64
+    font_weight: int = 800
+    uppercase: bool = False
+    tracking: int = 0
     color: str = "#FFFFFF"
     highlight_color: str = "#FFE600"
+    outline_color: str = "#000000"
+    shadow_color: str = "#000000"
     background: bool = False
+    bg_mode: Literal["none", "box", "rounded", "full", "highlight"] = "none"
     bg_color: str = "#000000"
+    bg_opacity: float = 0.6
     shadow: bool = True
+    shadow_blur: int = 3
     outline: int = 3
     bold: bool = True
-    position: Literal["bottom", "center", "top"] = "bottom"
+    position: Literal["bottom", "center", "top", "upper", "lower"] = "lower"
     alignment: Literal["left", "center", "right"] = "center"
     max_words_per_line: int = 4
     word_highlight: bool = False
+    auto_emphasis: bool = False
 
 
 class MusicSettings(BaseModel):
@@ -80,7 +94,7 @@ class ClipInfo(BaseModel):
     end: float
     title: str = ""
     reason: str = ""
-    status: Literal["queued", "processing", "completed", "failed"] = "queued"
+    status: Literal["queued", "processing", "uploading", "verifying", "ready", "completed", "failed"] = "queued"
     progress: int = 0
     filename: Optional[str] = None
     error: Optional[str] = None

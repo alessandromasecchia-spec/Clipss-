@@ -5,18 +5,37 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Type, Check } from "lucide-react";
 
 const PRESETS = {
-  classico: { label: "Classico", font: "DejaVu Sans", size: 58, color: "#FFFFFF", bold: false, outline: 3, shadow: true, background: false },
-  bold: { label: "Bold", font: "DejaVu Sans", size: 68, color: "#FFFFFF", bold: true, outline: 4, shadow: true, background: false },
-  gaming: { label: "Gaming", font: "DejaVu Sans", size: 66, color: "#00E5FF", bold: true, outline: 5, shadow: true, background: false },
-  minimal: { label: "Minimal", font: "DejaVu Sans", size: 52, color: "#FFFFFF", bold: false, outline: 1, shadow: false, background: true, bg_color: "#000000" },
+  classic: { label: "Classic", mode: "static", animation: "fade", size: 58, color: "#FFFFFF", bold: true, outline: 3, shadow: true, background: false },
+  bold: { label: "Bold", mode: "highlight", animation: "fade", size: 70, color: "#FFFFFF", highlight_color: "#FFE600", bold: true, outline: 5, shadow: true, background: false },
+  minimal: { label: "Minimal", mode: "minimal", animation: "fade", size: 50, color: "#FFFFFF", bold: false, outline: 1, shadow: true, background: false },
+  gaming: { label: "Gaming", mode: "glow", animation: "word_pop", size: 66, color: "#00E5FF", highlight_color: "#B4FF00", bold: true, outline: 4, shadow: true, background: false },
+  karaoke: { label: "Karaoke", mode: "karaoke", animation: "karaoke", size: 64, color: "#FFFFFF", highlight_color: "#22D3EE", bold: true, outline: 4, shadow: true, background: false },
+  highlight: { label: "Highlight", mode: "highlight", animation: "pop", size: 66, color: "#FFFFFF", highlight_color: "#FACC15", bold: true, outline: 4, shadow: true, background: false },
+  pop: { label: "Pop", mode: "pop", animation: "word_pop", size: 66, color: "#FFFFFF", highlight_color: "#FB7185", bold: true, outline: 4, shadow: true, background: false },
+  scale: { label: "Scale", mode: "scale", animation: "scale", size: 64, color: "#FFFFFF", highlight_color: "#34D399", bold: true, outline: 4, shadow: true, background: false },
+  box: { label: "Box", mode: "box", animation: "fade", size: 56, color: "#FFFFFF", bold: true, outline: 0, shadow: false, background: true, bg_color: "#111111", bg_mode: "box", bg_opacity: 0.75 },
+  glow: { label: "Glow", mode: "glow", animation: "fade", size: 62, color: "#FFFFFF", highlight_color: "#A78BFA", bold: true, outline: 2, shadow: true, background: false },
+  hormozi: { label: "Hormozi", mode: "hormozi", animation: "pop", size: 84, color: "#FFFFFF", highlight_color: "#FFE600", bold: true, uppercase: true, outline: 6, shadow: true, background: false },
+  clean: { label: "Clean", mode: "word_by_word", animation: "fade", size: 60, color: "#FFFFFF", bold: true, outline: 3, shadow: true, background: false },
 };
+
+const MODES = [
+  { v: "static", l: "Static" }, { v: "word_by_word", l: "Word by word" }, { v: "highlight", l: "Highlight" },
+  { v: "karaoke", l: "Karaoke" }, { v: "pop", l: "Pop" }, { v: "scale", l: "Scale" },
+  { v: "box", l: "Box" }, { v: "glow", l: "Glow" }, { v: "hormozi", l: "Hormozi" }, { v: "minimal", l: "Minimal" },
+];
+const ANIMATIONS = [
+  { v: "none", l: "Nessuna" }, { v: "fade", l: "Fade" }, { v: "pop", l: "Pop" }, { v: "scale", l: "Scale" },
+  { v: "word_pop", l: "Word Pop" }, { v: "karaoke", l: "Karaoke" }, { v: "slide_up", l: "Slide Up" },
+  { v: "slide_down", l: "Slide Down" }, { v: "bounce", l: "Bounce" }, { v: "typewriter", l: "Typewriter" },
+];
 
 const FONTS = ["DejaVu Sans", "Liberation Sans", "Liberation Serif", "DejaVu Sans Mono"];
 const COLORS = ["#FFFFFF", "#FFE600", "#00E5FF", "#10B981", "#F43F5E", "#FF7A00", "#000000"];
 
 export const SubtitleStyleEditor = ({ style, onChange }) => {
   const set = (patch) => onChange({ ...style, ...patch });
-  const applyPreset = (key) => set({ preset: key, ...PRESETS[key] });
+  const applyPreset = (key) => { const { label, ...rest } = PRESETS[key]; set({ preset: key, ...rest }); };
 
   const previewJustify = style.alignment === "left" ? "flex-start" : style.alignment === "right" ? "flex-end" : "center";
   const previewAlign = style.position === "top" ? "flex-start" : style.position === "center" ? "center" : "flex-end";
@@ -58,6 +77,23 @@ export const SubtitleStyleEditor = ({ style, onChange }) => {
               {p.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-slate-500 font-mono">Modalità caption</Label>
+          <Select value={style.mode || "highlight"} onValueChange={(v) => set({ mode: v })}>
+            <SelectTrigger className="mt-1.5 bg-[#13161C] border-white/10" data-testid="caption-mode"><SelectValue /></SelectTrigger>
+            <SelectContent>{MODES.map((m) => <SelectItem key={m.v} value={m.v}>{m.l}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs uppercase tracking-wide text-slate-500 font-mono">Animazione</Label>
+          <Select value={style.animation || "fade"} onValueChange={(v) => set({ animation: v })}>
+            <SelectTrigger className="mt-1.5 bg-[#13161C] border-white/10" data-testid="caption-animation"><SelectValue /></SelectTrigger>
+            <SelectContent>{ANIMATIONS.map((m) => <SelectItem key={m.v} value={m.v}>{m.l}</SelectItem>)}</SelectContent>
+          </Select>
         </div>
       </div>
 

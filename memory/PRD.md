@@ -35,6 +35,12 @@ Creator/editor singolo che vuole generare rapidamente clip verticali dai propri 
 - ✅ Test reali eseguiti: upload→process→2 clip 1080x1920 H.264 (verificato ffprobe); trascrizione Whisper + auto-clip a confini di frase + sottotitoli **verificati impressi** su frame estratto; ZIP generato; progress reale.
 - ✅ README completo (requisiti, installazione, FFmpeg, Whisper, avvio, config, troubleshooting, limiti).
 
+## Fase 6.5 — Fix caricamento clip + Caption Studio Pro (2026-06 / iter 3)
+- ✅ FIX STALL (causa reale): I/O storage bloccante (`requests`) dentro handler async + `_range_response` che caricava l'intero file in RAM per ogni Range → event loop bloccato ad ogni seek. Fix: cache disco (download once via `asyncio.to_thread`) + serving Range 206 leggendo solo la fetta dal file locale + tutte le op storage su thread. Stati clip reali (processing→verifying(ffprobe)→uploading(retry+backoff)→completed) + timeout FFmpeg. Verificato 10/10 stabile, riapertura progetti OK.
+- ✅ Caption Studio Pro: word-timing reale Whisper; 10 modalità (static/word_by_word/highlight/karaoke/pop/scale/box/glow/hormozi/minimal) rese via ASS+FFmpeg; 12 preset; animazioni (fade/pop/scale/word_pop/karaoke; slide/bounce/typewriter→fallback); word highlight (colore+scala+glow) sincronizzato; parole-per-riga; controlli stile estesi; export SRT/VTT/TXT (`GET /projects/{id}/captions`). Verificato con frame estratti (pop scala parola attiva, karaoke sweep cyan→bianco).
+- ✅ Frontend: SubtitleStyleEditor esteso (mode/animation select + 12 preset + word-highlight + colori), stati coda Verifica/Caricamento, player reload-once, export caption in ClipResults.
+- ⏸️ Rimandato: editor caption timeline (split/merge/drag, correzione testo per-parola, per-word style, auto-emoji, traduzione multilingua). Modello dati caption già strutturato.
+
 ## Fase 6 — Auto Edit Pro (2026-06 / iter 2)
 - ✅ Backend reale: silence removal (silencedetect+trim/concat, taglio verificato 9.09s→6.0s / 20.84s gap-clip accorciato), smart zoom (normal/punch_in/punch_out via zoompan agganciato alle frasi), face tracking con smoothing (crop tempo-variante) + fallback centro, word-highlight sottotitoli con timestamp reali Whisper, parole-per-riga, export presets (social_hq/social_small/custom CRF), mix musica (amix + volume/offset/fade/loop), image overlay (posizione/scala/opacità/start-end), coda batch serializzata (asyncio.Semaphore(1)).
 - ✅ Endpoint aggiunti: POST /audio, POST /overlay; /process esteso retro-compatibile.

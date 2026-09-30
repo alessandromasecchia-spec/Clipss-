@@ -28,9 +28,9 @@ const DEFAULT_SETTINGS = {
   music: null,
   overlay: null,
   subtitle_style: {
-    preset: "bold", font: "DejaVu Sans", size: 68, color: "#FFFFFF",
-    highlight_color: "#FFE600", background: false, bg_color: "#000000",
-    shadow: true, outline: 4, bold: true, position: "bottom", alignment: "center",
+    preset: "bold", mode: "highlight", animation: "fade", font: "DejaVu Sans", size: 68,
+    color: "#FFFFFF", highlight_color: "#FFE600", background: false, bg_color: "#000000",
+    shadow: true, outline: 4, bold: true, position: "lower", alignment: "center",
     max_words_per_line: 4, word_highlight: false,
   },
 };
