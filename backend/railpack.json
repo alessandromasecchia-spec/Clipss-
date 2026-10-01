@@ -1,0 +1,6 @@
+{
+  "providers": ["python"],
+  "python": {
+    "version": "3.12"
+  }
+}
