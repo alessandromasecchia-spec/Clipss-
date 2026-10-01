@@ -2,6 +2,11 @@ import asyncio
 import logging
 import os
 import shutil
+import ipaddress
+import socket
+import subprocess
+import sys
+import urllib.parse
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -76,6 +81,105 @@ def _range_response(data: bytes, content_type: str, request: Request, filename: 
             pass
     headers["Content-Length"] = str(total)
     return Response(data, media_type=content_type, headers=headers)
+  def _validate_source_url(raw: str) -> str:
+    url = (raw or "").strip()
+    parsed = urllib.parse.urlparse(url)
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(
+            status_code=400,
+            detail="Inserisci un link video http:// o https:// valido."
+        )
+
+    host = parsed.hostname or ""
+
+    try:
+        infos = socket.getaddrinfo(host, None)
+
+        for info in infos:
+            addr = ipaddress.ip_address(info[4][0])
+
+            if (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_reserved
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Indirizzo non consentito."
+                )
+
+    except socket.gaierror:
+        raise HTTPException(
+            status_code=400,
+            detail="Dominio non raggiungibile."
+        )
+
+    return url
+
+
+def _download_video_url(url: str, out_dir: Path) -> Path:
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    template = str(out_dir / "source.%(ext)s")
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "yt_dlp",
+        "--no-playlist",
+        "--restrict-filenames",
+        "--max-filesize",
+        str(MAX_UPLOAD_BYTES),
+        "--socket-timeout",
+        "20",
+        "--retries",
+        "2",
+        "-f",
+        "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best",
+        "--merge-output-format",
+        "mp4",
+        "-o",
+        template,
+        url,
+    ]
+
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+
+    except FileNotFoundError:
+        raise RuntimeError("yt-dlp non è installato nel backend.")
+
+    except subprocess.CalledProcessError as e:
+        error = e.stderr or e.stdout or "Download del link fallito."
+        raise RuntimeError(error[-1000:])
+
+    candidates = [
+        p for p in out_dir.glob("source.*")
+        if p.is_file()
+    ]
+
+    if not candidates:
+        raise RuntimeError(
+            "Il link non contiene un video scaricabile."
+        )
+
+    path = candidates[0]
+
+    if path.stat().st_size == 0:
+        raise RuntimeError("Il video scaricato è vuoto.")
+
+    if path.stat().st_size > MAX_UPLOAD_BYTES:
+        raise RuntimeError("Video troppo grande (max 2GB).")
+
+    return path
 
 
 # ------------------------- routes -------------------------
@@ -140,6 +244,106 @@ async def upload_video(file: UploadFile = File(...)):
                       stored_filename=f"original{ext}", ext=ext, **meta)
     await db.projects.insert_one(project.model_dump())
     return _project_summary(project.model_dump())
+  @api.post("/upload-url")
+async def upload_video_url(payload: dict = Body(...)):
+    url = _validate_source_url(payload.get("url", ""))
+
+    if free_disk_bytes(WORK_DIR) < 500 * 1024 * 1024:
+        raise HTTPException(
+            status_code=507,
+            detail="Spazio su disco insufficiente."
+        )
+
+    project_id = new_id()
+    temp_dir = WORK_DIR / f"url_{project_id}"
+
+    try:
+        video_path = await asyncio.to_thread(
+            _download_video_url,
+            url,
+            temp_dir
+        )
+
+        ext = video_path.suffix.lower()
+
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Formato scaricato non supportato ({ext})."
+            )
+
+        try:
+            meta = await probe_video(video_path)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=str(e)
+            )
+
+        original = sanitize_filename(
+            video_path.name
+        )
+
+        await asyncio.to_thread(
+            storage.put_file,
+            storage.orig_path(project_id, ext),
+            video_path,
+            "video/mp4"
+        )
+
+        await generate_thumbnail(
+            video_path,
+            project_id,
+            at_sec=min(1.0, meta["duration"] / 2)
+        )
+
+        thumb_local = THUMB_DIR / f"{project_id}.jpg"
+
+        if thumb_local.exists():
+            await asyncio.to_thread(
+                storage.put_file,
+                storage.thumb_path(project_id),
+                thumb_local,
+                "image/jpeg"
+            )
+
+            thumb_local.unlink(missing_ok=True)
+
+        meta["size_bytes"] = video_path.stat().st_size
+
+        project = Project(
+            id=project_id,
+            name=original,
+            original_filename=original,
+            stored_filename=f"original{ext}",
+            ext=ext,
+            **meta
+        )
+
+        await db.projects.insert_one(
+            project.model_dump()
+        )
+
+        return _project_summary(
+            project.model_dump()
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        logger.exception("Import da URL fallito")
+
+        raise HTTPException(
+            status_code=400,
+            detail=f"Impossibile importare il link: {str(e)[:500]}"
+        )
+
+    finally:
+        shutil.rmtree(
+            temp_dir,
+            ignore_errors=True
+        )
 
 
 @api.get("/projects")
