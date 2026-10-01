@@ -80,8 +80,8 @@ def _range_response(data: bytes, content_type: str, request: Request, filename: 
         except Exception:
             pass
     headers["Content-Length"] = str(total)
-    return Response(data, media_type=content_type, headers=headers)
-  def _validate_source_url(raw: str) -> str:
+    return Response(data, media_type=content_type, headers=headers)          
+def _validate_source_url(raw: str) -> str:
     url = (raw or "").strip()
     parsed = urllib.parse.urlparse(url)
 
@@ -244,7 +244,7 @@ async def upload_video(file: UploadFile = File(...)):
                       stored_filename=f"original{ext}", ext=ext, **meta)
     await db.projects.insert_one(project.model_dump())
     return _project_summary(project.model_dump())
-  @api.post("/upload-url")
+@api.post("/upload-url")
 async def upload_video_url(payload: dict = Body(...)):
     url = _validate_source_url(payload.get("url", ""))
 
