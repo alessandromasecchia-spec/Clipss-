@@ -18,6 +18,10 @@ export const api = {
       },
     });
   },
+uploadUrl: (url) => {
+    return http.post("/upload-url", { url });
+  },
+  
   listProjects: () => http.get("/projects"),
   getProject: (id) => http.get(`/projects/${id}`),
   deleteProject: (id) => http.delete(`/projects/${id}`),
